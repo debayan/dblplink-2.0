@@ -1,0 +1,11 @@
+version: '3'
+services:
+  store:
+    image: openlink/virtuoso-opensource-7
+    container_name: dblp-debayan-3
+    ports: ["8896:8890","1116:1111"]
+    environment:
+            DBA_PASSWORD: 'speaker123'
+    volumes:
+      - ./virtuoso:/opt/virtuoso-opensource/database
+      - ./virtuoso:/usr/share/proj
