@@ -63,6 +63,7 @@ class EntityLinker:
         Fetches candidate entities for a given span in the text.
         This is a placeholder implementation.
         """
+        results = []
         for span in spans:
             entity_type = span['type']
             types = []
@@ -71,7 +72,7 @@ class EntityLinker:
             elif entity_type == "publication":
                 types = ["https://dblp.org/rdf/schema#Book", "https://dblp.org/rdf/schema#Article", "https://dblp.org/rdf/schema#Publication"]
             elif entity_type == "venue":
-                types = ["https://dblp.org/rdf/schema#Conference", "https://dblp.org/rdf/schema#Incollection", "https://dblp.org/rdf/schema#Inproceedings", "https://dblp.org/rdf/schema#Journal", "https://dblp.org/rdf/schema#Series", "https://dblp.org/rdf/schema#Stream"]
+                types = ["https://dblp.org/rdf/schema#Conference", "https://dblp.org/rdf/schema#Incollection", "https://dblp.org/rdf/schema#Inproceedings", "https://dblp.org/rdf/schema#Journal", "https://dblp.org/rdf/schema#Series", "https://dblp.org/rdf/schema#Stream", "https://dblp.org/rdf/schema#Publication"]
 
             label = span['label']
             print(f"Fetching candidates for type: {entity_type}, label: {label}")    
@@ -88,10 +89,10 @@ class EntityLinker:
             }
             response = self.es.search(index='dblp', body=query)
             # Extract entity field from results
-            results = [
-                hit["_source"]
+            results.append([
+                hit
                 for hit in response["hits"]["hits"]
-            ]
+            ])
         # Placeholder for candidate fetching logic
         return results
     def reranks_candidates(self, text, spans, candidates):
@@ -106,19 +107,22 @@ class EntityLinker:
 if __name__ == "__main__":
     # Example usage
     config = {
-        "elasticsearch": "http://localhost:9222"
+        "elasticsearch": "http://localhost:9222",
+        "sparql_endpoint": "http://localhost:7015"
     }
     
     entity_linker = EntityLinker(config)
     
-    text = "which papers in NEURIPS 2022 were authored by Chris Biemann?"
+    text = "which papers in neurips was authored by Biemann?"
     #spans = [{"type": "person", "label": "Debayan Banerjee"}]
     spans = entity_linker.detect_spans_types(text)
     print("Detected Spans:", spans)
-    candidates = entity_linker.fetch_candidates(text, spans)
+    candidate_results = entity_linker.fetch_candidates(text, spans)
+    for candidate_result in candidate_results:
+        print("Candidates:", candidate_result)
     
     #reranked_candidates = entity_linker.reranks_candidates(text, spans, candidates)
     
     
-    print("Candidates:", candidates)
+    #print("Candidates:", candidates)
     #print("Reranked Candidates:", reranked_candidates)
