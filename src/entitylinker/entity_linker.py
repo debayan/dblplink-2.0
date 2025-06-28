@@ -3,18 +3,20 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import re
 from elasticsearch import Elasticsearch
+from candidate_reranker import CandidateReranker
 
 
 class EntityLinker:    
     def __init__(self, config):
         self.config = config
-        MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
+        MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
         # Load model and tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
         self.model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, trust_remote_code=True).eval()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         self.es = Elasticsearch(config['elasticsearch'])
+        self.candidate_reranker = CandidateReranker(self.model, self.tokenizer, config, self.device)
 
     def detect_spans_types(self, text):
         """
@@ -95,15 +97,15 @@ class EntityLinker:
             ])
         # Placeholder for candidate fetching logic
         return results
-    def reranks_candidates(self, text, spans, candidates):
+    
+    def rerank_candidates(self, text, spans, entity_candidates):
         """
         Reranks the candidates based on some criteria.
         This is a placeholder implementation.
         """
-        # Placeholder for reranking logic
-        return candidates
+        sorted_spans = self.candidate_reranker.rerank_candidates(text, spans, entity_candidates)
+        return sorted_spans
     
-
 if __name__ == "__main__":
     # Example usage
     config = {
@@ -113,16 +115,24 @@ if __name__ == "__main__":
     
     entity_linker = EntityLinker(config)
     
-    text = "which papers in neurips was authored by Biemann?"
-    #spans = [{"type": "person", "label": "Debayan Banerjee"}]
+    text = "which papers in sigir 2023 was authored by Chris Biemann?"
+    print("Detecting spans and types in text:", text)
     spans = entity_linker.detect_spans_types(text)
     print("Detected Spans:", spans)
+    print(" Fetching candidates for detected spans...")
     candidate_results = entity_linker.fetch_candidates(text, spans)
-    for candidate_result in candidate_results:
-        print("Candidates:", candidate_result)
-    
-    #reranked_candidates = entity_linker.reranks_candidates(text, spans, candidates)
-    
-    
-    #print("Candidates:", candidates)
-    #print("Reranked Candidates:", reranked_candidates)
+    entity_candidates = []
+    for candidate in candidate_results:
+        uris = []
+        for item in candidate:
+            uris.append((item['_id'], item['_source']['label']))
+        entity_candidates.append(uris)
+    print("Candidate Results:", entity_candidates)
+    print("sorting candidates ...")
+    sorted_spans = entity_linker.rerank_candidates(text, spans, entity_candidates)
+    print("Final Reranked Entities:")
+    for sorted_span in sorted_spans:
+        print(f"Span: {sorted_span['span']}")
+        print("Entities:")
+        for entity_uri, score in sorted_span['entities']:
+            print(f"  - {entity_uri}  (Score: {score})")

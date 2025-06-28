@@ -9,16 +9,15 @@ import torch.nn.functional as F
 import numpy as np
 
 class CandidateReranker:
-    def __init__(self, config, model_name="Qwen/Qwen2.5-0.5B-Instruct", device="cuda"):
+    def __init__(self, model, tokenizer, config, device="cuda"):
         self.config = config
         self.endpoint = config["sparql_endpoint"]
         self.headers = {
             "Accept": "application/sparql-results+json"
         }
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True).to(device)
+        self.tokenizer = tokenizer
+        self.model = model
         self.device = device
-
 
     def format_input(self, mention, context, entity_name, entity_info_lines):
         entity_info_text = "\n".join(entity_info_lines)
@@ -70,7 +69,7 @@ class CandidateReranker:
 
         SELECT DISTINCT ?s ?sLabel ?p ?pLabel ?o ?oLabel WHERE {{
          
-            VALUES ?s {{ <{entity_uri}> }}
+            VALUES ?s {{ <{entity_uri[0]}> }}
             ?s ?p ?o .
             OPTIONAL {{ ?s rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?sLabel  }}
             OPTIONAL {{ ?p rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?pLabel  }}
@@ -90,7 +89,7 @@ class CandidateReranker:
 
         SELECT DISTINCT ?s ?sLabel ?p ?pLabel ?o ?oLabel WHERE {{
         
-            VALUES ?o {{ <{entity_uri}> }}
+            VALUES ?o {{ <{entity_uri[0]}> }}
             ?s ?p ?o .
             OPTIONAL {{ ?s rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?sLabel }}
             OPTIONAL {{ ?p rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?pLabel }}
@@ -145,7 +144,7 @@ class CandidateReranker:
                 # Linearize the neighborhood
                 entity_neighborhood = self.linearise_neighbourhood(left, right)
                 # Score the entity based on its neighborhood
-                score = self.compute_yes_score(span['label'], text, entity_uri, entity_neighborhood)
+                score = self.compute_yes_score(span['label'], text, entity_uri[0], entity_neighborhood)
                 entity_scores.append((entity_uri, score))
             # Sort by score in descending order
             entity_scores.sort(key=lambda x: x[1], reverse=True)
