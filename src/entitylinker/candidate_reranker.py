@@ -53,7 +53,7 @@ class CandidateReranker:
             else:
                 yes_logprob = log_probs[i, yes_pos[0], yes_token_id].item()
             scores.append(yes_logprob)
-        return np.mean(scores)
+        return max(scores)
 
     def fetch_one_hop(self, entity_uri):
         """
@@ -139,11 +139,13 @@ class CandidateReranker:
         sorted_spans = []
         for span,entity_uris in zip(spans,entity_candidates):
             entity_scores = []
+            print("Fetching one-hop neighbors for entity URIs...",span)
             for entity_uri in entity_uris:
                 left, right = self.fetch_one_hop(entity_uri)
                 # Linearize the neighborhood
                 entity_neighborhood = self.linearise_neighbourhood(left, right)
                 # Score the entity based on its neighborhood
+                print(f"Scoring entity {entity_uri[0]} with neighborhood size {len(entity_neighborhood)}")
                 score = self.compute_yes_score(span['label'], text, entity_uri[0], entity_neighborhood)
                 entity_scores.append((entity_uri, score))
             # Sort by score in descending order
