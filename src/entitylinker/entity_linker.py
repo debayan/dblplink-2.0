@@ -9,7 +9,7 @@ from candidate_reranker import CandidateReranker
 class EntityLinker:    
     def __init__(self, config):
         self.config = config
-        MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+        MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
         # Load model and tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
         self.model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, trust_remote_code=True).eval()

@@ -19,21 +19,23 @@ class CandidateReranker:
         self.model = model
         self.device = device
 
-    def format_input(self, mention, context, entity_name, entity_info_lines):
-        entity_info_text = "\n".join(entity_info_lines)
+    def format_input(self, mention, context, entity_name, entity_info_line):
+        entity_info_text = entity_info_line
+        print(entity_info_text)
         return f"""You are an assistant linking mentions to entities.
                    Document: {context}
                    Mention: {mention}
                    Candidate Entity: {entity_name}
                    Entity Info: {entity_info_text}
-                   Question: Does the mention belong to this entity? Answer Yes/No.
+                   Question: Does the mention belong to this entity? Answer-Yes/No.
                    Answer:"""
 
     
     def compute_yes_score(self, mention, context, entity_name, entity_info_lines):
         # Add " Yes" to each input
         full_inputs = [self.format_input(mention, context, entity_name, entity_info_line) + " Yes" for entity_info_line in entity_info_lines]
-        inputs = self.tokenizer(full_inputs, return_tensors='pt', padding=True, truncation=True, max_length=2048).to(self.device)
+        #print("Full Inputs for scoring:", full_inputs)
+        inputs = self.tokenizer(full_inputs, return_tensors='pt', padding=True, truncation=True, max_length=1024).to(self.device)
 
         with torch.no_grad():
             outputs = self.model(**inputs)
@@ -124,9 +126,8 @@ class CandidateReranker:
         # print("RIGHT ------------")
         # print(right.replace('\t',' ').split('\n')[1:])
         # print("======================")
-        leftNodeNeighbourhood = left.replace('\t',' ').split('\n')[1:]
-        rightNodeNeighbourhood = right.replace('\t',' ').split('\n')[1:]
-        entityNeighbourhood.extend(leftNodeNeighbourhood)
+        leftNodeNeighbourhood = [x for x in left.replace('\t',' ').split('\n')[1:] if '_:bn' not in x] #no blank nodes
+        rightNodeNeighbourhood = [x for x in right.replace('\t',' ').split('\n')[1:] if '_:bn' not in x] #no blank nodes
         entityNeighbourhood.extend(rightNodeNeighbourhood)
         return entityNeighbourhood
 
