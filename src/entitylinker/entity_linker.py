@@ -9,7 +9,7 @@ from candidate_reranker import CandidateReranker
 class EntityLinker:    
     def __init__(self, config):
         self.config = config
-        MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
+        MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
         # Load model and tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
         self.model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, trust_remote_code=True).eval()
@@ -75,6 +75,7 @@ class EntityLinker:
                 types = ["https://dblp.org/rdf/schema#Book", "https://dblp.org/rdf/schema#Article", "https://dblp.org/rdf/schema#Publication"]
             elif entity_type == "venue":
                 types = ["https://dblp.org/rdf/schema#Conference", "https://dblp.org/rdf/schema#Incollection", "https://dblp.org/rdf/schema#Inproceedings", "https://dblp.org/rdf/schema#Journal", "https://dblp.org/rdf/schema#Series", "https://dblp.org/rdf/schema#Stream", "https://dblp.org/rdf/schema#Publication"]
+            
 
             label = span['label']
             print(f"Fetching candidates for type: {entity_type}, label: {label}")    
@@ -115,7 +116,7 @@ if __name__ == "__main__":
     
     entity_linker = EntityLinker(config)
     
-    text = "which papers in sigir 2023 was authored by Chris Biemann?"
+    text = "which papers in ACL 2023 was authored by Chris Biemann?"
     print("Detecting spans and types in text:", text)
     spans = entity_linker.detect_spans_types(text)
     print("Detected Spans:", spans)
@@ -131,8 +132,9 @@ if __name__ == "__main__":
     print("sorting candidates ...")
     sorted_spans = entity_linker.rerank_candidates(text, spans, entity_candidates)
     print("Final Reranked Entities:")
+    print(json.dumps(sorted_spans, indent=2))
     for sorted_span in sorted_spans:
         print(f"Span: {sorted_span['span']}")
         print("Entities:")
-        for entity_uri, score in sorted_span['entities']:
-            print(f"  - {entity_uri}  (Score: {score})")
+        for entity_uri,score,sentence in sorted_span['entities']:
+            print(f"  - {entity_uri}  (Score: {score}) Sentence: {sentence}")

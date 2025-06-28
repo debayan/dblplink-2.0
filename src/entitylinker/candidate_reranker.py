@@ -21,7 +21,7 @@ class CandidateReranker:
 
     def format_input(self, mention, context, entity_name, entity_info_line):
         entity_info_text = entity_info_line
-        print(entity_info_text)
+        #print(entity_info_text)
         return f"""You are an assistant linking mentions to entities.
                    Document: {context}
                    Mention: {mention}
@@ -35,7 +35,7 @@ class CandidateReranker:
         # Add " Yes" to each input
         full_inputs = [self.format_input(mention, context, entity_name, entity_info_line) + " Yes" for entity_info_line in entity_info_lines]
         #print("Full Inputs for scoring:", full_inputs)
-        inputs = self.tokenizer(full_inputs, return_tensors='pt', padding=True, truncation=True, max_length=1024).to(self.device)
+        inputs = self.tokenizer(full_inputs, return_tensors='pt', padding=True, truncation=True, max_length=128).to(self.device)
 
         with torch.no_grad():
             outputs = self.model(**inputs)
@@ -55,7 +55,13 @@ class CandidateReranker:
             else:
                 yes_logprob = log_probs[i, yes_pos[0], yes_token_id].item()
             scores.append(yes_logprob)
-        return max(scores)
+        max_score = max(scores)
+        best_index = scores.index(max_score)
+        best_sentence = entity_info_lines[best_index]
+        # print("entity", entity_name)
+        # print("entity info line", entity_info_lines)
+        # print("best sentence", best_sentence)
+        return max_score, best_sentence
 
     def fetch_one_hop(self, entity_uri):
         """
@@ -69,7 +75,7 @@ class CandidateReranker:
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX dblp: <https://dblp.org/rdf/schema#>
 
-        SELECT DISTINCT ?s ?sLabel ?p ?pLabel ?o ?oLabel WHERE {{
+        SELECT DISTINCT  ?sLabel ?p  ?oLabel WHERE {{
          
             VALUES ?s {{ <{entity_uri[0]}> }}
             ?s ?p ?o .
@@ -79,7 +85,7 @@ class CandidateReranker:
             FILTER (?p NOT IN (dblp:signatureCreator,dblp:signaturePublication,dblp:hasSignature))
         
         }}
-        limit 10
+        limit 50
         """
         queryright = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -89,7 +95,7 @@ class CandidateReranker:
         PREFIX dblp: <https://dblp.org/rdf/schema#>
 
 
-        SELECT DISTINCT ?s ?sLabel ?p ?pLabel ?o ?oLabel WHERE {{
+        SELECT DISTINCT  ?sLabel  ?pLabel  ?oLabel WHERE {{
         
             VALUES ?o {{ <{entity_uri[0]}> }}
             ?s ?p ?o .
@@ -100,7 +106,7 @@ class CandidateReranker:
             
         
         }}
-        limit 10
+        limit 50
         """
         params = {
         "query": queryleft,
@@ -126,9 +132,10 @@ class CandidateReranker:
         # print("RIGHT ------------")
         # print(right.replace('\t',' ').split('\n')[1:])
         # print("======================")
-        leftNodeNeighbourhood = [x for x in left.replace('\t',' ').split('\n')[1:] if '_:bn' not in x] #no blank nodes
-        rightNodeNeighbourhood = [x for x in right.replace('\t',' ').split('\n')[1:] if '_:bn' not in x] #no blank nodes
+        leftNodeNeighbourhood = [x for x in left.strip().replace('\t',' ').split('\n')[1:] if '_:bn' not in x] #no blank nodes
+        rightNodeNeighbourhood = [x for x in right.strip().replace('\t',' ').split('\n')[1:] if '_:bn' not in x] #no blank nodes
         entityNeighbourhood.extend(rightNodeNeighbourhood)
+        entityNeighbourhood = [x for x in entityNeighbourhood if x and x.strip()] #only triples
         return entityNeighbourhood
 
 
@@ -140,15 +147,18 @@ class CandidateReranker:
         sorted_spans = []
         for span,entity_uris in zip(spans,entity_candidates):
             entity_scores = []
-            print("Fetching one-hop neighbors for entity URIs...",span)
             for entity_uri in entity_uris:
+                print("Fetching one-hop neighbors for entity URI...",entity_uri)
                 left, right = self.fetch_one_hop(entity_uri)
                 # Linearize the neighborhood
                 entity_neighborhood = self.linearise_neighbourhood(left, right)
+                if not entity_neighborhood:
+                    print(f"No neighborhood found for entity {entity_uri[0]}")
+                    continue
                 # Score the entity based on its neighborhood
                 print(f"Scoring entity {entity_uri[0]} with neighborhood size {len(entity_neighborhood)}")
-                score = self.compute_yes_score(span['label'], text, entity_uri[0], entity_neighborhood)
-                entity_scores.append((entity_uri, score))
+                score,sentence = self.compute_yes_score(span['label'], text, entity_uri[0], entity_neighborhood)
+                entity_scores.append((entity_uri, score, sentence))
             # Sort by score in descending order
             entity_scores.sort(key=lambda x: x[1], reverse=True)
             sorted_spans.append({'span': span, 'entities': entity_scores})
@@ -169,6 +179,6 @@ if __name__ == "__main__":
     print("Final Reranked Entities:")
     for sorted_span in sorted_spans:
         print(f"Span: {sorted_span['span']}")
-        for entity_uri, score in sorted_span['entities']:
-            print(f"  Entity: {entity_uri}, Score: {score:.4f}")
+        for entity_uri, score, sentence in sorted_span['entities']:
+            print(f"  Entity: {entity_uri}, Score: {score:.4f} Sentence: {sentence}")
     print("Reranking completed.")
