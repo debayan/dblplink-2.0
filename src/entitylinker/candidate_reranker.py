@@ -7,6 +7,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, LogitsProcessorList
 import torch.nn.functional as F
 import numpy as np
+import time
 
 class CandidateReranker:
     def __init__(self, model, tokenizer, config, device="cuda"):
@@ -149,15 +150,21 @@ class CandidateReranker:
             entity_scores = []
             for entity_uri in entity_uris:
                 print("Fetching one-hop neighbors for entity URI...",entity_uri)
+                start = time.time()
                 left, right = self.fetch_one_hop(entity_uri)
+                end = time.time()
+                print(f"Time taken for neighbourhood: {end - start:.6f} seconds")
                 # Linearize the neighborhood
                 entity_neighborhood = self.linearise_neighbourhood(left, right)
                 if not entity_neighborhood:
                     print(f"No neighborhood found for entity {entity_uri[0]}")
                     continue
                 # Score the entity based on its neighborhood
+                start = time.time()
                 print(f"Scoring entity {entity_uri[0]} with neighborhood size {len(entity_neighborhood)}")
                 score,sentence = self.compute_yes_score(span['label'], text, entity_uri[0], entity_neighborhood)
+                end = time.time()
+                print(f"Time taken for sorting: {end - start:.6f} seconds")
                 entity_scores.append((entity_uri, score, sentence))
             # Sort by score in descending order
             entity_scores.sort(key=lambda x: x[1], reverse=True)

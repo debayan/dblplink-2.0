@@ -9,7 +9,7 @@ from candidate_reranker import CandidateReranker
 class EntityLinker:    
     def __init__(self, config):
         self.config = config
-        MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+        MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
         # Load model and tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
         self.model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, trust_remote_code=True).eval()
@@ -26,7 +26,7 @@ class EntityLinker:
         messages = [
         {"role": "system", "content": "You are an information extraction assistant."},
         {"role": "user", "content": f"""Extract named entities from the following sentence and classify them into one of the following types: person, publication, venue.
-         For example: "Which papers in ICLR 2023 were authored by Debayan Banerjee?" should return a person entity with type "person" and label "Debayan Banerjee" and venue entity with
+         For example: "Which papers in ICLR 2023 were authored by Banerjee, Debayan?" should return a person entity with type "person" and label "Debayan Banerjee" and venue entity with
          type "venue" and label "ICLR 2023".
         Return the result as a JSON array of objects with "type" and "label" fields.
         Sentence: "{text}"
@@ -138,3 +138,4 @@ if __name__ == "__main__":
         print("Entities:")
         for entity_uri,score,sentence in sorted_span['entities']:
             print(f"  - {entity_uri}  (Score: {score}) Sentence: {sentence}")
+            
