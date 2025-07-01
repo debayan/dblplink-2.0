@@ -67,8 +67,12 @@ class CandidateReranker:
     def fetch_one_hop(self, entity_uri):
         """
         Fetch one-hop neighbors (both subject and object) and their labels.
-        Returns a list of triples in the form (subject_label, predicate_label, object_label)
+        Returns two lists of dictionaries with ?sLabel ?pLabel ?oLabel
         """
+        headers = {
+            "Accept": "application/sparql-results+json"
+        }
+
         queryleft = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
@@ -76,17 +80,14 @@ class CandidateReranker:
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX dblp: <https://dblp.org/rdf/schema#>
 
-        SELECT DISTINCT  ?sLabel ?p  ?oLabel WHERE {{
-         
+        SELECT DISTINCT ?sLabel ?p ?oLabel WHERE {{
             VALUES ?s {{ <{entity_uri[0]}> }}
             ?s ?p ?o .
-            OPTIONAL {{ ?s rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?sLabel  }}
-            OPTIONAL {{ ?p rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?pLabel  }}
-            OPTIONAL {{ ?o rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?oLabel  }}
+            OPTIONAL {{ ?s rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?sLabel }}
+            OPTIONAL {{ ?p rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?pLabel }}
+            OPTIONAL {{ ?o rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?oLabel }}
             FILTER (?p NOT IN (dblp:signatureCreator,dblp:signaturePublication,dblp:hasSignature))
-        
-        }}
-        limit 50
+        }} LIMIT 50
         """
         queryright = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -95,49 +96,52 @@ class CandidateReranker:
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX dblp: <https://dblp.org/rdf/schema#>
 
-
-        SELECT DISTINCT  ?sLabel  ?pLabel  ?oLabel WHERE {{
-        
+        SELECT DISTINCT ?sLabel ?pLabel ?oLabel WHERE {{
             VALUES ?o {{ <{entity_uri[0]}> }}
             ?s ?p ?o .
             OPTIONAL {{ ?s rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?sLabel }}
             OPTIONAL {{ ?p rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?pLabel }}
-            OPTIONAL {{ ?o rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?oLabel  }}
+            OPTIONAL {{ ?o rdfs:label|skos:prefLabel|dc:title|foaf:name|dblp:abstract|dc:description|dblp:title ?oLabel }}
             FILTER (?p NOT IN (dblp:signatureCreator,dblp:signaturePublication,dblp:hasSignature))
-            
-        
-        }}
-        limit 50
+        }} LIMIT 50
         """
-        params = {
-        "query": queryleft,
-        "action": "tsv_export"
-        }
-        responseleft = requests.get(self.endpoint, params=params)
-        params = {
-        "query": queryright,
-        "action": "tsv_export"
-        }
-        responseright = requests.get(self.endpoint, params=params)
-        return str(responseleft.text),str(responseright.text)
+
+        response_left = requests.get(self.endpoint, headers=headers, params={"query": queryleft})
+        response_right = requests.get(self.endpoint, headers=headers, params={"query": queryright})
+
+        left_json = response_left.json()
+        right_json = response_right.json()
+
+        return left_json, right_json
+
     
-    def linearise_neighbourhood(self, left, right):
+    def linearise_neighbourhood(self, left_json, right_json):
         """
         Linearizes the one-hop neighborhood into a list of strings.
-        Each string is a formatted representation of the triple.
+        Each string is a formatted representation of the triple from JSON data.
         """
-        entityNeighbourhood = []
-        # print(entity)
-        # print("LEFT ------------")
-        # print(left.replace('\t',' ').split('\n')[1:])
-        # print("RIGHT ------------")
-        # print(right.replace('\t',' ').split('\n')[1:])
-        # print("======================")
-        leftNodeNeighbourhood = [x for x in left.strip().replace('\t',' ').split('\n')[1:] if '_:bn' not in x] #no blank nodes
-        rightNodeNeighbourhood = [x for x in right.strip().replace('\t',' ').split('\n')[1:] if '_:bn' not in x] #no blank nodes
-        entityNeighbourhood.extend(rightNodeNeighbourhood)
-        entityNeighbourhood = [x for x in entityNeighbourhood if x and x.strip()] #only triples
-        return entityNeighbourhood
+        def extract_triple(binding, s_key='sLabel', p_key='p', o_key='oLabel'):
+            s = binding.get(s_key, {}).get('value', '').strip()
+            p = binding.get(p_key, {}).get('value', '').strip()
+            o = binding.get(o_key, {}).get('value', '').strip()
+            if '_:bn' in s or '_:bn' in o:
+                return None
+            return f"{s} — {p} — {o}" if s and p and o else None
+
+        triples = []
+
+        for binding in left_json["results"]["bindings"]:
+            triple = extract_triple(binding, s_key="sLabel", p_key="p", o_key="oLabel")
+            if triple:
+                triples.append(triple)
+
+        for binding in right_json["results"]["bindings"]:
+            triple = extract_triple(binding, s_key="sLabel", p_key="pLabel", o_key="oLabel")
+            if triple:
+                triples.append(triple)
+
+        return triples
+
 
 
     def rerank_candidates(self, text, spans, entity_candidates):
@@ -176,7 +180,7 @@ class CandidateReranker:
 if __name__ == "__main__":
     # Example usage
     config = {
-        "sparql_endpoint": "http://localhost:7015"
+        "sparql_endpoint": "http://localhost:89897/sparql"
     }
     reranker = CandidateReranker(config)
     text = "which papers in neurips was authored by Biemann?"
