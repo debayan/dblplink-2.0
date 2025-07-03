@@ -199,7 +199,7 @@ class CandidateReranker:
                 score, evidence_sentence = self.compute_avg_yes_score(span['label'], text, entity_uri[0], entity_neighborhood)
                 end = time.time()
                 print(f"Time taken for sorting: {end - start:.6f} seconds")
-                entity_scores.append([score, [entity_uri[0], entity_uri[1], entity_uri[1], evidence_sentence]]) #0 is url, 1 is label, 2 is type
+                entity_scores.append([score, [entity_uri[0], entity_uri[1], entity_uri[2], evidence_sentence]]) #0 is url, 1 is label, 2 is type
             # Sort by score in descending order
             entity_scores.sort(key=lambda x: x[0], reverse=True)
             sorted_spans.append({'label': span['label'], 'result': entity_scores, 'type': span['type']})
