@@ -126,16 +126,16 @@ if __name__ == "__main__":
     for candidate in candidate_results:
         uris = []
         for item in candidate:
-            uris.append((item['_id'], item['_source']['label']))
+            uris.append((item['_id'], item['_source']['label'], item['_source']['type']))
         entity_candidates.append(uris)
     print("Candidate Results:", entity_candidates)
     print("sorting candidates ...")
     sorted_spans = entity_linker.rerank_candidates(text, spans, entity_candidates)
     print("Final Reranked Entities:")
     print(json.dumps(sorted_spans, indent=2))
-    for sorted_span in sorted_spans:
-        print(f"Span: {sorted_span['span']}")
+    for sorted_span in sorted_spans['entitylinkingresults']:
+        print(f"Span: {sorted_span['label']}")
         print("Entities:")
-        for entity_uri,score,sentence in sorted_span['entities']:
-            print(f"  - {entity_uri}  (Score: {score}) Sentence: {sentence}")
+        for score,entity in sorted_span['result']:
+            print(f"  - {entity[0]} {entity[1]}  (Score: {score}) Sentence: {entity[2]}")
             

@@ -31,12 +31,40 @@ class CandidateReranker:
                    Question: Does the mention belong to this entity? Answer-Yes/No.
                    Answer:"""
 
-    
-    def compute_yes_score(self, mention, context, entity_name, entity_info_lines):
+    def compute_avg_yes_score(self, mention, context, entity_name, entity_info_lines):
+        """
+        Computes the average log-probability score for 'Yes' over all entity_info_lines.
+        Returns the average score and the top contributing sentence.
+        """
+        full_inputs = [self.format_input(mention, context, entity_name, line) + " Yes" for line in entity_info_lines]
+        inputs = self.tokenizer(full_inputs, return_tensors='pt', padding=True, truncation=True, max_length=256).to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+            logits = outputs.logits  # (batch_size, seq_len, vocab_size)
+
+        log_probs = F.log_softmax(logits, dim=-1)
+        yes_token_id = self.tokenizer(" Yes", add_special_tokens=False)["input_ids"][0]
+
+        scores = []
+        for i in range(len(full_inputs)):
+            yes_pos = (inputs.input_ids[i] == yes_token_id).nonzero(as_tuple=True)[0]
+            if len(yes_pos) == 0:
+                yes_logprob = log_probs[i, -2, yes_token_id].item()
+            else:
+                yes_logprob = log_probs[i, yes_pos[0], yes_token_id].item()
+            scores.append(yes_logprob)
+
+        avg_score = float(np.mean(scores))
+        best_index = scores.index(max(scores))
+        best_sentence = entity_info_lines[best_index]
+        return avg_score, best_sentence
+
+    def compute_max_yes_score(self, mention, context, entity_name, entity_info_lines):
         # Add " Yes" to each input
         full_inputs = [self.format_input(mention, context, entity_name, entity_info_line) + " Yes" for entity_info_line in entity_info_lines]
         #print("Full Inputs for scoring:", full_inputs)
-        inputs = self.tokenizer(full_inputs, return_tensors='pt', padding=True, truncation=True, max_length=128).to(self.device)
+        inputs = self.tokenizer(full_inputs, return_tensors='pt', padding=True, truncation=True, max_length=256).to(self.device)
 
         with torch.no_grad():
             outputs = self.model(**inputs)
@@ -149,6 +177,7 @@ class CandidateReranker:
         Reranks the candidate entities based on their scores.
         Returns a list of tuples (entity_uri, score) sorted by score.
         """
+        final_result = {}
         sorted_spans = []
         for span,entity_uris in zip(spans,entity_candidates):
             entity_scores = []
@@ -166,15 +195,19 @@ class CandidateReranker:
                 # Score the entity based on its neighborhood
                 start = time.time()
                 print(f"Scoring entity {entity_uri[0]} with neighborhood size {len(entity_neighborhood)}")
-                score,sentence = self.compute_yes_score(span['label'], text, entity_uri[0], entity_neighborhood)
+                #score,sentence = self.compute_max_yes_score(span['label'], text, entity_uri[0], entity_neighborhood)
+                score, evidence_sentence = self.compute_avg_yes_score(span['label'], text, entity_uri[0], entity_neighborhood)
                 end = time.time()
                 print(f"Time taken for sorting: {end - start:.6f} seconds")
-                entity_scores.append((entity_uri, score, sentence))
+                entity_scores.append([score, [entity_uri[0], entity_uri[1], entity_uri[1], evidence_sentence]]) #0 is url, 1 is label, 2 is type
             # Sort by score in descending order
-            entity_scores.sort(key=lambda x: x[1], reverse=True)
-            sorted_spans.append({'span': span, 'entities': entity_scores})
+            entity_scores.sort(key=lambda x: x[0], reverse=True)
+            sorted_spans.append({'label': span['label'], 'result': entity_scores, 'type': span['type']})
+        final_result['entitylinkingresults'] = sorted_spans
+        final_result['predictedlabelspans'] = [span['label'] + ' : ' + span['type'] for span in spans]
+        final_result['question'] = text
         # Return the sorted list of entity URIs and their scores    
-        return sorted_spans
+        return final_result
     
 
 if __name__ == "__main__":
@@ -188,7 +221,7 @@ if __name__ == "__main__":
     entity_candidates = [['https://dblp.org/pid/306/6142' ,'https://dblp.org/pid/20/6100'],['https://dblp.org/streams/conf/gazeml','https://dblp.org/streams/conf/nips']] # Example URIs
     sorted_spans = reranker.rerank_candidates(text, spans, entity_candidates)
     print("Final Reranked Entities:")
-    for sorted_span in sorted_spans:
+    for sorted_span in sorted_spans['entitylinkingresults']:
         print(f"Span: {sorted_span['span']}")
         for entity_uri, score, sentence in sorted_span['entities']:
             print(f"  Entity: {entity_uri}, Score: {score:.4f} Sentence: {sentence}")
