@@ -3,7 +3,7 @@
 
 
 
-This repository contains all code and resources for the Demo Paper accepted at International Semantic Web Conference 2025. The paper is titled "DBLPLink 2.0 -- An Entity Linker for the DBLP Scholarly Knowledge Graph" - Debayan Banerjee, Tilahun Abedissa Taffa, Ricardo Usbeck 
+This repository contains all code and resources for the Demo Paper accepted at International Semantic Web Conference 2025. The paper is titled "[DBLPLink 2.0 -- An Entity Linker for the DBLP Scholarly Knowledge Graph](https://ceur-ws.org/Vol-4085/paper73.pdf)" - Debayan Banerjee, Tilahun Abedissa Taffa, Ricardo Usbeck 
 
 
 
